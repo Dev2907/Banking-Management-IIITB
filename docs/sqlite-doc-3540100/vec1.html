@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html><head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<link href="sqlite.css" rel="stylesheet">
+<title>Vec1 Vector Extension</title>
+<!-- path= -->
+</head>
+<body>
+<div class=nosearch>
+<a href="index.html">
+<img class="logo" src="images/sqlite370_banner.svg" alt="SQLite" border="0">
+</a>
+<div><!-- IE hack to prevent disappearing logo --></div>
+<div class="tagline desktoponly">
+Small. Fast. Reliable.<br>Choose any three.
+</div>
+<div class="menu mainmenu">
+<ul>
+<li><a href="index.html">Home</a>
+<li class='mobileonly'><a href="javascript:void(0)" onclick='toggle_div("submenu")'>Menu</a>
+<li class='wideonly'><a href='about.html'>About</a>
+<li class='desktoponly'><a href="docs.html">Documentation</a>
+<li class='desktoponly'><a href="download.html">Download</a>
+<li class='wideonly'><a href='copyright.html'>License</a>
+<li class='desktoponly'><a href="support.html">Support</a>
+<li class='desktoponly'><a href="prosupport.html">Purchase</a>
+<li class='search' id='search_menubutton'>
+<a href="javascript:void(0)" onclick='toggle_search()'>Search</a>
+</ul>
+</div>
+<div class="menu submenu" id="submenu">
+<ul>
+<li><a href='about.html'>About</a>
+<li><a href='docs.html'>Documentation</a>
+<li><a href='download.html'>Download</a>
+<li><a href='support.html'>Support</a>
+<li><a href='prosupport.html'>Purchase</a>
+</ul>
+</div>
+<div class="searchmenu" id="searchmenu">
+<form method="GET" action="search">
+<select name="s" id="searchtype">
+<option value="d">Search Documentation</option>
+<option value="c">Search Changelog</option>
+</select>
+<input type="text" name="q" id="searchbox" value="">
+<input type="submit" value="Go">
+</form>
+</div>
+</div>
+<script>
+function toggle_div(nm) {
+var w = document.getElementById(nm);
+if( w.style.display=="block" ){
+w.style.display = "none";
+}else{
+w.style.display = "block";
+}
+}
+function toggle_search() {
+var w = document.getElementById("searchmenu");
+if( w.style.display=="block" ){
+w.style.display = "none";
+} else {
+w.style.display = "block";
+setTimeout(function(){
+document.getElementById("searchbox").focus()
+}, 30);
+}
+}
+function div_off(nm){document.getElementById(nm).style.display="none";}
+window.onbeforeunload = function(e){div_off("submenu");}
+/* Disable the Search feature if we are not operating from CGI, since */
+/* Search is accomplished using CGI and will not work without it. */
+if( !location.origin || !location.origin.match || !location.origin.match(/http/) ){
+document.getElementById("search_menubutton").style.display = "none";
+}
+/* Used by the Hide/Show button beside syntax diagrams, to toggle the */
+function hideorshow(btn,obj){
+var x = document.getElementById(obj);
+var b = document.getElementById(btn);
+if( x.style.display!='none' ){
+x.style.display = 'none';
+b.innerHTML='show';
+}else{
+x.style.display = '';
+b.innerHTML='hide';
+}
+return false;
+}
+var antiRobot = 0;
+function antiRobotGo(){
+if( antiRobot!=3 ) return;
+antiRobot = 7;
+var j = document.getElementById("mtimelink");
+if(j && j.hasAttribute("data-href")) j.href=j.getAttribute("data-href");
+}
+function antiRobotDefense(){
+document.body.onmousedown=function(){
+antiRobot |= 2;
+antiRobotGo();
+document.body.onmousedown=null;
+}
+document.body.onmousemove=function(){
+antiRobot |= 2;
+antiRobotGo();
+document.body.onmousemove=null;
+}
+setTimeout(function(){
+antiRobot |= 1;
+antiRobotGo();
+}, 100)
+antiRobotGo();
+}
+antiRobotDefense();
+</script>
+<div class=fancy>
+<div class=nosearch>
+<div class="fancy_title">
+Vec1 Vector Extension
+</div>
+<details class="fancy_toc">
+<summary>Table Of Contents</summary>
+<div id="toc_sub"><div class="fancy-toc1"><a href="#overview">1. Overview</a></div>
+<div class="fancy-toc1"><a href="#building">2. Building The Extension</a></div>
+<div class="fancy-toc1"><a href="#usage">3. Usage</a></div>
+<div class="fancy-toc1"><a href="#roadmap">4. Roadmap</a></div>
+</div>
+</details>
+</div>
+
+
+
+
+
+<h1 id="overview"><span>1. </span>Overview</h1>
+
+<p>Vec1 is an SQLite extension that provides approximate nearest-neighbor (ANN)
+vector search using SQLite's <a href="vtab.html">virtual table</a> interface.  Euclidean (L2) and
+cosine distances are supported.  Vec1 is implemented in portable C and has no
+external dependencies. It uses
+<a href="https://en.wikipedia.org/wiki/Advanced_Vector_Extensions">AVX2</a>
+on x86 and
+<a href="https://en.wikipedia.org/wiki/ARM_architecture_family#Advanced_SIMD_(NEON)">NEON</a>
+on ARM.
+
+</p><p>Vec1 uses IVFADC (Inverted File with Asymmetric Distance Computation) with OPQ
+(Optimized Product Quantization).
+
+</p><p>Tests on publicly available datasets are <a href="vec1bench.html">available here</a>.
+
+</p><a name="building"></a>
+<h1 id="building" tags="vec1 building"><span>2. </span>Building The Extension</h1>
+
+<p>The extension is implemented in a single C file, "vec1.c". The current release
+is <a href="https://sqlite.org/src/file?name=ext/vec1/vec1.c&ci=tip">version
+0.8</a>. The easiest way to compile vec1.c to a loadable extension on unix-like
+platforms is to use the configure script at the root of the full SQLite source tree
+as follows (replace vec1.so with vec1.dylib on OSX):
+
+</p><div class="codeblock"><pre>./configure && make vec1.so
+</pre></div>
+
+<p>Or on windows, using the Makefile.msc file at the root of the full SQLite
+source tree:
+
+</p><div class="codeblock"><pre>nmake /F Makefile.msc vec1.dll
+</pre></div>
+
+<p>Alternatively, it may be compiled in the same way as other 
+<a href="loadext.html#build">SQLite extensions</a>.  For best performance,
+compile with <a href="https://en.wikipedia.org/wiki/Single_instruction,_multiple_data">SIMD</a>
+support and aggressive compiler optimizations.
+
+</p><p>For example, on Linux or macOS x86-64 with gcc or clang:
+
+</p><div class="codeblock"><pre>cc -g -O3 -DNDEBUG -mavx2 -mfma vec1.c -shared -fPIC -o vec1.so
+</pre></div>
+
+<p>Or with MSVC on x86-64:
+
+</p><div class="codeblock"><pre>cl /Zi /O2 /DNDEBUG /arch:AVX2 vec1.c -link -dll -out:vec1.dll
+</pre></div>
+
+<p>No special switches are required to enable NEON on ARM. The compiler
+should still be passed -O3 or the equivalent to enable loop-unrolling and other
+aggressive optimizations.
+
+</p><p>Binaries compiled with SIMD instructions enabled on x86-64 platforms as shown
+above will not work on systems that lack them. A method for building vec1
+to support multiple x86-64 architectures is found in
+<a href="https://sqlite.org/src/file?name=ext/vec1/Makefile&ci=tip">this Makefile</a>
+(target "vec1multi.so"). The configure script and Makefile.msc methods of
+building describe above do this automatically.
+
+</p><h1 id="usage"><span>3. </span>Usage</h1>
+
+<p>A <a href="vec1doc.html">user manual</a> and
+<a href="vec1ref.html">reference docs</a> are available. Also a video
+<a href="https://www.youtube.com/watch?v=sWKhPD4eIvE">"Vector Queries with
+SQLite Vec1"</a>.
+
+</p><h1 id="roadmap"><span>4. </span>Roadmap</h1>
+
+
+<p>Future developments may include:
+
+</p><ul>
+  <li> More and better testing.
+
+  </li><li> More and better optimization of almost all paths.
+
+  </li><li> Add an option for a modern graph-based index as an alternative to IVFADC.
+       HNSW? DiskANN? Some variant? 
+
+  </li><li> Optimization of "SELECT count(*) FROM vec1tbl".
+
+  </li><li> Add support for SIMD on wasm.
+
+  </li><li> Support vectors constructed of elements other than 32-bit IEEE floats -
+       e.g. 8-bit or 32-bit integers, or 16-bit floats.
+
+  </li><li> Support for partition keys.
+
+  </li><li> Add the ability to open and use databases created on platforms that use
+       different byte orders for floating point values.
+
+  </li><li> Implement dot-product as a distance metric for search.
+
+  </li><li> Allow queries to use multiple threads.
+</li></ul>
+<p align="center"><small><i>This page was last updated on 2026-10-01 11:21:38Z </small></i></p>
+
