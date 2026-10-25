@@ -10,6 +10,7 @@
 #include <sys/wait.h>
 #include <sys/file.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <sodium.h>
 #include <netinet/in.h>
 #include <unistd.h>
@@ -22,6 +23,13 @@ const string DBPATH = "src/db/main.db";
 const string LOCKPATH = "src/locks/session_user_";
 
 using namespace std;
+
+void reapChildren(int) {
+    int savedErrno = errno;
+    while (waitpid(-1, nullptr, WNOHANG) > 0) {
+    }
+    errno = savedErrno;
+}
 
 bool recvLine(
     int clientFD,
@@ -570,7 +578,7 @@ void administratorSession(
     }
 }
 
-void handleClient(int clientFD){
+int handleClient(int clientFD){
     sqlite3* db = nullptr;
     int rc = sqlite3_open(DBPATH.c_str(), &db);
 
@@ -582,7 +590,19 @@ void handleClient(int clientFD){
             sqlite3_close(db);
         }
         close(clientFD);
-        _exit(1);
+        return 1;
+    }
+
+    char* pragmaError = nullptr;
+    rc = sqlite3_exec(db, "PRAGMA foreign_keys = ON;", nullptr, nullptr, &pragmaError);
+    if (rc != SQLITE_OK) {
+        cerr << "Failed to enable SQLite foreign keys: "
+             << (pragmaError ? pragmaError : sqlite3_errmsg(db)) << endl;
+        sqlite3_free(pragmaError);
+        sqlite3_close(db);
+        sendLine(clientFD, "Internal server error");
+        close(clientFD);
+        return 1;
     }
 
     // This helper sends a response and closes the resources
@@ -606,7 +626,7 @@ void handleClient(int clientFD){
     ){
         cerr << "Invalid request" << endl;
         finish("Invalid Request");
-        _exit(1);
+        return 1;
     }
 
     if(operation == "login" || operation == "signup"){
@@ -637,36 +657,37 @@ void handleClient(int clientFD){
                         string("0\nThere is already an existing session for this user\n") +
                         "-1\n" + role + "\n";
                     finish(rejection);
-                    _exit(1);
+                    return 1;
                 }
                 sendLines(clientFD, response);
                 if(res.role == userRoles::Customer){
                     customerSession(db, clientFD, res.userID, username);
-                    _exit(0);
+                    return 0;
                 }
                 if(res.role == userRoles::Employee){
                     employeeSession(db, clientFD, res.userID, username);
-                    _exit(0);
+                    return 0;
                 }
                 if(res.role == userRoles::Manager){
                     managerSession(db, clientFD, res.userID, username);
-                    _exit(0);
+                    return 0;
                 }
                 if(res.role == userRoles::Administrator){
                     administratorSession(db, clientFD, res.userID, username);
-                    _exit(0);
+                    return 0;
                 }
                 finish("Session completed");
             }else{
                 finish(response);
-                _exit(1);
+                return 1;
             }
         }catch(const exception& e){
             cerr << "[Server] Auth Error: "<<  e.what() << endl;
             finish("Authentication failure");
-            _exit(1);
+            return 1;
         }
     }
+    return 0;
 }
 
 int main(){
@@ -702,11 +723,24 @@ int main(){
     cout << "addr: " << INADDR_LOOPBACK << endl;
     cout << endl;
 
+    struct sigaction childAction{};
+    childAction.sa_handler = reapChildren;
+    sigemptyset(&childAction.sa_mask);
+    childAction.sa_flags = SA_RESTART | SA_NOCLDSTOP;
+    if (sigaction(SIGCHLD, &childAction, nullptr) == -1) {
+        perror("Failed to configure SIGCHLD handler");
+        close(serverFD);
+        return 1;
+    }
+
     while (true){
         int clientFD = accept(serverFD, nullptr, nullptr);
         
 
         if(clientFD == -1){
+            if (errno == EINTR) {
+                continue;
+            }
             perror("Accept error");
             return 1;
         }
@@ -718,11 +752,9 @@ int main(){
             close(clientFD);
         }else if(clientP == 0){
             close(serverFD);
-            handleClient(clientFD);
-            return 0;
+            _exit(handleClient(clientFD));
         }else{
             close(clientFD);
-            while (waitpid(clientP, nullptr, WNOHANG) > 0) {};
         }
     }
 
