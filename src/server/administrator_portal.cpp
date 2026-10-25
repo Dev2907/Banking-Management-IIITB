@@ -1,15 +1,17 @@
 #include "includes/administrator_portal.hpp"
+#include "includes/database_operations.hpp"
 #include "includes/password_utils.hpp"
 
 #include <stdexcept>
 
+using namespace std;
 administratorPortal::administratorPortal(sqlite3* db, int administratorID)
 	: db_(db), administratorID_(administratorID) {
 	if (db_ == nullptr) {
-		throw std::invalid_argument("DB connection cannot be null");
+		throw invalid_argument("DB connection cannot be null");
 	}
 	if (administratorID_ < 0) {
-		throw std::invalid_argument("Administrator ID is invalid");
+		throw invalid_argument("Administrator ID is invalid");
 	}
 }
 
@@ -17,8 +19,7 @@ bool administratorPortal::prepareStatement(
 	const char* sql,
 	sqlite3_stmt*& stmt
 ) const {
-	stmt = nullptr;
-	return sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) == SQLITE_OK;
+	return databaseOperations::prepareStatement(db_, sql, stmt);
 }
 
 void administratorPortal::rollback() const {
@@ -26,8 +27,8 @@ void administratorPortal::rollback() const {
 }
 
 administratorRes administratorPortal::createUser(
-	const std::string& username,
-	const std::string& password,
+	const string& username,
+	const string& password,
 	int role
 ) {
 	administratorRes res{};
@@ -37,10 +38,10 @@ administratorRes administratorPortal::createUser(
 		return res;
 	}
 
-	std::string passwordHash;
+	string passwordHash;
 	try {
 		passwordHash = hashPassword(password);
-	} catch (const std::exception& error) {
+	} catch (const exception& error) {
 		res.msg = error.what();
 		return res;
 	}
@@ -122,8 +123,8 @@ administratorRes administratorPortal::createUser(
 }
 
 administratorRes administratorPortal::modifyUser(
-	const std::string& currentUsername,
-	const std::string& newUsername,
+	const string& currentUsername,
+	const string& newUsername,
 	int newRole,
 	bool isActive
 ) {
@@ -206,8 +207,8 @@ administratorRes administratorPortal::modifyUser(
 }
 
 administratorRes administratorPortal::changePassword(
-	const std::string& currentPassword,
-	const std::string& newPassword
+	const string& currentPassword,
+	const string& newPassword
 ) {
 	administratorRes res{};
 	if (currentPassword.empty() || newPassword.empty() || newPassword.size() > 1024) {
@@ -231,17 +232,17 @@ administratorRes administratorPortal::changePassword(
 		return res;
 	}
 	const auto* hashText = sqlite3_column_text(stmt, 0);
-	std::string storedHash = hashText ? reinterpret_cast<const char*>(hashText) : "";
+	string storedHash = hashText ? reinterpret_cast<const char*>(hashText) : "";
 	sqlite3_finalize(stmt);
 	if (!verifyPassword(storedHash, currentPassword)) {
 		res.msg = "Current password is incorrect";
 		return res;
 	}
 
-	std::string newHash;
+	string newHash;
 	try {
 		newHash = hashPassword(newPassword);
-	} catch (const std::exception& error) {
+	} catch (const exception& error) {
 		res.msg = error.what();
 		return res;
 	}

@@ -1,4 +1,5 @@
 #include "includes/customer_portal.hpp"
+#include "includes/database_operations.hpp"
 #include "includes/password_utils.hpp"
 
 #include <iostream>
@@ -17,8 +18,7 @@ customerPortal::customerPortal(sqlite3* db, int userId): db_(db),userId_(userId)
 }
 
 bool customerPortal::prepareStatement(const char* sql, sqlite3_stmt*& stmt) const{
-    stmt = nullptr;
-    return sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) == SQLITE_OK;
+    return databaseOperations::prepareStatement(db_, sql, stmt);
 }
 
 bool customerPortal::beginTransaction(custRes& res) const{

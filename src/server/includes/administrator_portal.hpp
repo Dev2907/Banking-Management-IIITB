@@ -3,9 +3,10 @@
 #include <sqlite3.h>
 #include <string>
 
+using namespace std;
 struct administratorRes {
     bool status = false;
-    std::string msg;
+    string msg;
 };
 
 class administratorPortal {
@@ -20,18 +21,18 @@ public:
     explicit administratorPortal(sqlite3* db, int administratorID);
 
     administratorRes createUser(
-        const std::string& username,
-        const std::string& password,
+        const string& username,
+        const string& password,
         int role
     );
     administratorRes modifyUser(
-        const std::string& currentUsername,
-        const std::string& newUsername,
+        const string& currentUsername,
+        const string& newUsername,
         int newRole,
         bool isActive
     );
     administratorRes changePassword(
-        const std::string& currentPassword,
-        const std::string& newPassword
+        const string& currentPassword,
+        const string& newPassword
     );
 };

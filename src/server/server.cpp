@@ -631,12 +631,15 @@ void handleClient(int clientFD){
             
             
             if (res.success){
-                sendLines(clientFD, response);
                 sessionLock lock;
                 if(!lock.acquire(res.userID)){
-                    finish("There is already an existing session for this user");
+                    string rejection =
+                        string("0\nThere is already an existing session for this user\n") +
+                        "-1\n" + role + "\n";
+                    finish(rejection);
                     _exit(1);
                 }
+                sendLines(clientFD, response);
                 if(res.role == userRoles::Customer){
                     customerSession(db, clientFD, res.userID, username);
                     _exit(0);

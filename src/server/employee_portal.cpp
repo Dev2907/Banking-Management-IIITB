@@ -1,6 +1,8 @@
 #include "includes/employee_portal.hpp"
+#include "includes/database_operations.hpp"
 #include "includes/password_utils.hpp"
 
+#include <limits>
 #include <stdexcept>
 
 using namespace std;
@@ -19,8 +21,7 @@ bool employeePortal::prepareStatement(
     const char* sql,
     sqlite3_stmt*& stmt
 ) const {
-    stmt = nullptr;
-    return sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) == SQLITE_OK;
+    return databaseOperations::prepareStatement(db_, sql, stmt);
 }
 
 employeeRes employeePortal::changeCustomerUsername(
@@ -241,19 +242,113 @@ employeeRes employeePortal::processLoanApplication(
         return res;
     }
 
-    const char* sql =
+    int rc = sqlite3_exec(db_, "BEGIN IMMEDIATE;", nullptr, nullptr, nullptr);
+    if (rc != SQLITE_OK) {
+        res.msg = sqlite3_errmsg(db_);
+        return res;
+    }
+
+    auto rollback = [&]() {
+        sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    };
+
+    sqlite3_stmt* stmt = nullptr;
+
+    if (decisionStatus == 3) {
+        const char* loanSQL =
+            "SELECT l.account_id, l.amount_cents, a.balance_cents "
+            "FROM loans l JOIN accounts a ON a.account_id = l.account_id "
+            "WHERE l.loan_id = ? AND l.assigned_employee_id = ? AND l.status = '2' "
+            "AND EXISTS (SELECT 1 FROM users "
+            "WHERE user_id = ? AND role = 2 AND is_active = 1);";
+        if (!prepareStatement(loanSQL, stmt)) {
+            res.msg = sqlite3_errmsg(db_);
+            rollback();
+            return res;
+        }
+
+        rc = sqlite3_bind_int(stmt, 1, loanID);
+        if (rc == SQLITE_OK) rc = sqlite3_bind_int(stmt, 2, employeeID_);
+        if (rc == SQLITE_OK) rc = sqlite3_bind_int(stmt, 3, employeeID_);
+        if (rc == SQLITE_OK) rc = sqlite3_step(stmt);
+        if (rc != SQLITE_ROW) {
+            res.msg = rc == SQLITE_DONE
+                ? "Loan not found, not assigned to you, or not in assigned status"
+                : sqlite3_errmsg(db_);
+            sqlite3_finalize(stmt);
+            rollback();
+            return res;
+        }
+
+        int accountID = sqlite3_column_int(stmt, 0);
+        sqlite3_int64 loanAmount = sqlite3_column_int64(stmt, 1);
+        sqlite3_int64 currentBalance = sqlite3_column_int64(stmt, 2);
+        sqlite3_finalize(stmt);
+
+        if (currentBalance < 0 ||
+            loanAmount > numeric_limits<sqlite3_int64>::max() - currentBalance) {
+            res.msg = "Loan disbursement would exceed the supported balance";
+            rollback();
+            return res;
+        }
+        sqlite3_int64 newBalance = currentBalance + loanAmount;
+
+        const char* creditSQL =
+            "UPDATE accounts SET balance_cents = balance_cents + ? "
+            "WHERE account_id = ? AND balance_cents = ?;";
+        if (!prepareStatement(creditSQL, stmt)) {
+            res.msg = sqlite3_errmsg(db_);
+            rollback();
+            return res;
+        }
+        rc = sqlite3_bind_int64(stmt, 1, loanAmount);
+        if (rc == SQLITE_OK) rc = sqlite3_bind_int(stmt, 2, accountID);
+        if (rc == SQLITE_OK) rc = sqlite3_bind_int64(stmt, 3, currentBalance);
+        if (rc == SQLITE_OK) rc = sqlite3_step(stmt);
+        int rowsChanged = sqlite3_changes(db_);
+        sqlite3_finalize(stmt);
+        if (rc != SQLITE_DONE || rowsChanged != 1) {
+            res.msg = rc == SQLITE_DONE
+                ? "Failed to credit the loan account"
+                : sqlite3_errmsg(db_);
+            rollback();
+            return res;
+        }
+
+        const char* transactionSQL =
+            "INSERT INTO transactions "
+            "(account_id, amount_cents, type, balance_after_cents, timestamp) "
+            "VALUES (?, ?, 2, ?, CURRENT_TIMESTAMP);";
+        if (!prepareStatement(transactionSQL, stmt)) {
+            res.msg = sqlite3_errmsg(db_);
+            rollback();
+            return res;
+        }
+        rc = sqlite3_bind_int(stmt, 1, accountID);
+        if (rc == SQLITE_OK) rc = sqlite3_bind_int64(stmt, 2, loanAmount);
+        if (rc == SQLITE_OK) rc = sqlite3_bind_int64(stmt, 3, newBalance);
+        if (rc == SQLITE_OK) rc = sqlite3_step(stmt);
+        sqlite3_finalize(stmt);
+        if (rc != SQLITE_DONE) {
+            res.msg = sqlite3_errmsg(db_);
+            rollback();
+            return res;
+        }
+    }
+
+    const char* decisionSQL =
         "UPDATE loans SET status = ?, decision_by = ?, "
         "decision_at = CURRENT_TIMESTAMP "
         "WHERE loan_id = ? AND assigned_employee_id = ? AND status = '2' "
         "AND EXISTS (SELECT 1 FROM users "
         "WHERE user_id = ? AND role = 2 AND is_active = 1);";
-    sqlite3_stmt* stmt = nullptr;
-    if (!prepareStatement(sql, stmt)) {
+    if (!prepareStatement(decisionSQL, stmt)) {
         res.msg = sqlite3_errmsg(db_);
+        rollback();
         return res;
     }
 
-    int rc = sqlite3_bind_int(stmt, 1, decisionStatus);
+    rc = sqlite3_bind_int(stmt, 1, decisionStatus);
     if (rc == SQLITE_OK) {
         rc = sqlite3_bind_int(stmt, 2, employeeID_);
     }
@@ -273,6 +368,7 @@ employeeRes employeePortal::processLoanApplication(
     if (rc != SQLITE_DONE) {
         res.msg = sqlite3_errmsg(db_);
         sqlite3_finalize(stmt);
+        rollback();
         return res;
     }
     int rowsChanged = sqlite3_changes(db_);
@@ -280,6 +376,14 @@ employeeRes employeePortal::processLoanApplication(
 
     if (rowsChanged != 1) {
         res.msg = "Loan not found, not assigned to you, or not in assigned status";
+        rollback();
+        return res;
+    }
+
+    rc = sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, nullptr);
+    if (rc != SQLITE_OK) {
+        res.msg = sqlite3_errmsg(db_);
+        rollback();
         return res;
     }
 

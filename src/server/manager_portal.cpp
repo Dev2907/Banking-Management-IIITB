@@ -1,15 +1,18 @@
 #include "includes/manager_portal.hpp"
+#include "includes/database_operations.hpp"
 #include "includes/password_utils.hpp"
 
 #include <stdexcept>
 
+using namespace std;
+
 managerPortal::managerPortal(sqlite3* db, int managerID)
     : db_(db), managerID_(managerID) {
     if (db_ == nullptr) {
-        throw std::invalid_argument("DB connection cannot be null");
+        throw invalid_argument("DB connection cannot be null");
     }
     if (managerID_ < 0) {
-        throw std::invalid_argument("Manager ID is invalid");
+        throw invalid_argument("Manager ID is invalid");
     }
 }
 
@@ -17,13 +20,12 @@ bool managerPortal::prepareStatement(
     const char* sql,
     sqlite3_stmt*& stmt
 ) const {
-    stmt = nullptr;
-    return sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) == SQLITE_OK;
+    return databaseOperations::prepareStatement(db_, sql, stmt);
 }
 
 managerRes managerPortal::changeCustomerUsername(
-    const std::string& currentUsername,
-    const std::string& newUsername
+    const string& currentUsername,
+    const string& newUsername
 ) {
     managerRes res{};
     if (currentUsername.empty() || currentUsername.size() > 64 ||
@@ -65,7 +67,7 @@ managerRes managerPortal::changeCustomerUsername(
 }
 
 managerRes managerPortal::setCustomerActive(
-    const std::string& username,
+    const string& username,
     bool isActive
 ) {
     managerRes res{};
@@ -107,7 +109,7 @@ managerRes managerPortal::setCustomerActive(
 }
 
 managerRes managerPortal::assignLoanApplication(
-    const std::string& employeeUsername,
+    const string& employeeUsername,
     int loanID
 ) {
     managerRes res{};
@@ -188,11 +190,11 @@ managerRes managerPortal::getLoanApplications() {
         const auto* decisionAt = sqlite3_column_text(stmt, 7);
         const auto* status = sqlite3_column_text(stmt, 4);
 
-        res.msg += "Loan ID: " + std::to_string(sqlite3_column_int(stmt, 0));
+        res.msg += "Loan ID: " + to_string(sqlite3_column_int(stmt, 0));
         res.msg += " | Customer: ";
         res.msg += customer ? reinterpret_cast<const char*>(customer) : "unknown";
-        res.msg += " | Account: " + std::to_string(sqlite3_column_int(stmt, 2));
-        res.msg += " | Amount: " + std::to_string(sqlite3_column_int64(stmt, 3));
+        res.msg += " | Account: " + to_string(sqlite3_column_int(stmt, 2));
+        res.msg += " | Amount: " + to_string(sqlite3_column_int64(stmt, 3));
         res.msg += " | Status: ";
         res.msg += status ? reinterpret_cast<const char*>(status) : "unknown";
         res.msg += " | Assigned employee: ";
@@ -244,18 +246,18 @@ managerRes managerPortal::getAllUsersAndAccounts() {
         }
         const auto* username = sqlite3_column_text(stmt, 1);
         int role = sqlite3_column_int(stmt, 2);
-        res.msg += "User " + std::to_string(sqlite3_column_int(stmt, 0));
+        res.msg += "User " + to_string(sqlite3_column_int(stmt, 0));
         res.msg += " | Username: ";
         res.msg += username ? reinterpret_cast<const char*>(username) : "unknown";
-        res.msg += " | Role: " + std::to_string(role);
+        res.msg += " | Role: " + to_string(role);
         res.msg += " | State: ";
         res.msg += sqlite3_column_int(stmt, 3) == 1 ? "active" : "inactive";
         res.msg += " | Account: ";
         if (sqlite3_column_type(stmt, 4) == SQLITE_NULL) {
             res.msg += "none";
         } else {
-            res.msg += std::to_string(sqlite3_column_int(stmt, 4));
-            res.msg += " | Balance: " + std::to_string(sqlite3_column_int64(stmt, 5));
+            res.msg += to_string(sqlite3_column_int(stmt, 4));
+            res.msg += " | Balance: " + to_string(sqlite3_column_int64(stmt, 5));
         }
     }
 
@@ -300,7 +302,7 @@ managerRes managerPortal::getCustomerFeedback() {
         const auto* username = sqlite3_column_text(stmt, 1);
         const auto* message = sqlite3_column_text(stmt, 2);
         const auto* timestamp = sqlite3_column_text(stmt, 3);
-        res.msg += "Feedback ID: " + std::to_string(sqlite3_column_int(stmt, 0));
+        res.msg += "Feedback ID: " + to_string(sqlite3_column_int(stmt, 0));
         res.msg += " | Customer: ";
         res.msg += username ? reinterpret_cast<const char*>(username) : "unknown";
         res.msg += " | Submitted: ";
@@ -323,8 +325,8 @@ managerRes managerPortal::getCustomerFeedback() {
 }
 
 managerRes managerPortal::changePassword(
-    const std::string& currentPassword,
-    const std::string& newPassword
+    const string& currentPassword,
+    const string& newPassword
 ) {
     managerRes res{};
     if (currentPassword.empty() || newPassword.empty() || newPassword.size() > 1024) {
@@ -352,7 +354,7 @@ managerRes managerPortal::changePassword(
     }
 
     const auto* hashText = sqlite3_column_text(stmt, 0);
-    std::string storedHash = hashText
+    string storedHash = hashText
         ? reinterpret_cast<const char*>(hashText)
         : "";
     sqlite3_finalize(stmt);
@@ -361,10 +363,10 @@ managerRes managerPortal::changePassword(
         return res;
     }
 
-    std::string newHash;
+    string newHash;
     try {
         newHash = hashPassword(newPassword);
-    } catch (const std::exception& error) {
+    } catch (const exception& error) {
         res.msg = error.what();
         return res;
     }
