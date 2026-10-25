@@ -129,7 +129,7 @@ bool readCountedLines(int fd, const string& errorContext) {
     return true;
 }
 
-void customerLogin(int fd, int userID, int role){
+void customerLogin(int fd){
     string accountCountLine;
     if (!recvLine(fd, accountCountLine, 32)) {
         cerr << "Unable to receive customer accounts" << endl;
@@ -678,7 +678,7 @@ int main(){
             return 1;
         }
         if(stoi(role_rec) == 1){
-            customerLogin(clientFD ,stoi(userID), stoi(role_rec));
+            customerLogin(clientFD);
             destroyClient(clientFD);
             return 0;
         }

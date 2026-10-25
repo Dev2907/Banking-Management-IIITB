@@ -32,7 +32,7 @@ Seed development users and sample data:
 ```bash
 g++ -std=c++17 -Wall -Wextra -pedantic \
   -Isrc/server/includes -Isrc/server \
-  tests/seed_user_utility.cpp src/server/password_utils.cpp \
+  src/db/seed_user_utility.cpp src/server/password_utils.cpp \
   -lsqlite3 -lsodium -o seed_user_utility
 ./seed_user_utility
 ```
@@ -71,6 +71,31 @@ Build the client:
 g++ -std=c++17 -Wall -Wextra -pedantic \
   src/client/client.cpp -o bank_client
 ```
+
+# Makefile usage
+
+Copy `Makefile` to the root of `Banking-Management-IIITB`.
+
+Dependencies (Ubuntu/Debian):
+
+```bash
+sudo apt update
+sudo apt install build-essential make libsqlite3-dev libsodium-dev sqlite3
+```
+
+Run commands from the repository root:
+
+```bash
+make clean && make all  # builds bank_server, bank_client, seed_user_utility
+make init-db            # destructive: drops/recreates tables from src/db/create_db_schema.sql
+make seed               # seeds development users after schema initialization
+make run-server         # run in terminal 1
+make run-client         # run in terminal 2
+```
+
+`make all` only builds the seed utility; it does not execute it. `make seed` runs it. The seed utility uses the fixed database path `src/db/main.db`, so run all commands from the repository root. Back up any database data before running `make init-db`.
+
+The `.gitignore.snippet` file contains recommended ignore entries. Merge those entries into the repository's `.gitignore`; it is a snippet, not a replacement for an existing ignore file.
 
 ## Run
 
